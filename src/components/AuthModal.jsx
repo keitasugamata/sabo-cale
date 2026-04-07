@@ -19,20 +19,6 @@ export default function AuthModal({ onClose }) {
     return () => subscription.unsubscribe();
   }, [onClose]);
 
-  async function handleGoogle() {
-    setError(''); setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin },
-      });
-      if (error) throw error;
-    } catch (e) {
-      setError('Google ログイン失敗: ' + (e.message || e));
-      setLoading(false);
-    }
-  }
-
   async function handleEmail(e) {
     e.preventDefault();
     setError(''); setInfo(''); setLoading(true);
@@ -88,13 +74,6 @@ export default function AuthModal({ onClose }) {
             </div>
           ) : (
             <>
-              {/* Google ログイン */}
-              <button className="btn btn-primary btn-block" onClick={handleGoogle} disabled={loading}>
-                Google でログイン
-              </button>
-
-              <div className="auth-divider"><span>または</span></div>
-
               {/* メール/パスワード */}
               <form className="auth-form" onSubmit={handleEmail}>
                 <input
