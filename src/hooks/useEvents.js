@@ -159,10 +159,18 @@ export function useEvents(user) {
     });
   }, [persistMany]);
 
+  // 全イベント削除
+  const removeAllEvents = useCallback(async () => {
+    setEvents((prev) => {
+      removeMany(prev.map((e) => e.id));
+      return [];
+    });
+  }, [removeMany]);
+
   return {
     events, loading,
     addEvent, updateEvent, updateAllRecurring,
-    removeEvent, removeAllRecurring,
+    removeEvent, removeAllRecurring, removeAllEvents,
     toggleComplete,
     getEventsForDate, getEventsForMonth, importEvents,
   };

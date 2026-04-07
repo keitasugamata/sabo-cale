@@ -369,6 +369,10 @@ body {
   cursor: pointer;
   transition: background 0.1s;
   overflow: hidden;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .cal-cell:hover { background: var(--surface2); }
@@ -1488,6 +1492,21 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+/* ─── 危険ゾーン ────────────────────── */
+.danger-zone {
+  margin-top: 32px;
+  padding: 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.delete-confirm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ─── カレンダー選択 ───────────────────── */

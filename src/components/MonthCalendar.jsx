@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import {
   getDaysInMonth,
   getFirstDayOfMonth,
@@ -7,7 +7,6 @@ import {
   isPastDate,
   DAYS_JP,
 } from '../utils/dateUtils';
-import { useLongPress } from '../hooks/useLongPress';
 
 const MAX_CHIPS = 20;
 
@@ -27,6 +26,73 @@ function DayCell({ year, month, day, events, selected, onSelect, onLongPress, ge
   const past    = isPastDate(year, month, day);
   const isSel   = selected === dateStr;
   const dow     = new Date(year, month, day).getDay();
+  const cellRef = useRef();
+
+  // ─── ネイティブイベントで長押し検知 ───
+  useEffect(() => {
+    const el = cellRef.current;
+    if (!el) return;
+
+    let timer = null;
+    let startX = 0, startY = 0;
+    let moved = false;
+    let longPressed = false;
+
+    const start = (e) => {
+      const t = e.touches ? e.touches[0] : e;
+      startX = t.clientX;
+      startY = t.clientY;
+      moved = false;
+      longPressed = false;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!moved) {
+          longPressed = true;
+          if (navigator.vibrate) navigator.vibrate(40);
+          onLongPress(dateStr);
+        }
+        timer = null;
+      }, 450);
+    };
+
+    const move = (e) => {
+      const t = e.touches ? e.touches[0] : e;
+      if (Math.abs(t.clientX - startX) > 12 || Math.abs(t.clientY - startY) > 12) {
+        moved = true;
+        if (timer) { clearTimeout(timer); timer = null; }
+      }
+    };
+
+    const end = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (!moved && !longPressed) onSelect(dateStr);
+    };
+
+    const cancel = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', cancel);
+    el.addEventListener('mousedown', start);
+    el.addEventListener('mousemove', move);
+    el.addEventListener('mouseup', end);
+    el.addEventListener('mouseleave', cancel);
+
+    return () => {
+      cancel();
+      el.removeEventListener('touchstart', start);
+      el.removeEventListener('touchmove', move);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', cancel);
+      el.removeEventListener('mousedown', start);
+      el.removeEventListener('mousemove', move);
+      el.removeEventListener('mouseup', end);
+      el.removeEventListener('mouseleave', cancel);
+    };
+  }, [dateStr, onSelect, onLongPress]);
 
   const sorted  = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
   const visible = sorted.slice(0, MAX_CHIPS);
@@ -40,16 +106,10 @@ function DayCell({ year, month, day, events, selected, onSelect, onLongPress, ge
     isSel && !today ? 'sel-num' : '',
   ].filter(Boolean).join(' ');
 
-  const longPress = useLongPress(
-    () => onLongPress(dateStr),
-    () => onSelect(dateStr),
-    { ms: 450 }
-  );
-
   return (
     <div
+      ref={cellRef}
       className={['cal-cell', isSel ? 'selected' : ''].filter(Boolean).join(' ')}
-      {...longPress}
     >
       <div className="cal-day-header">
         <span className={numClass}>{day}</span>
@@ -70,6 +130,7 @@ export default function MonthCalendar({
 }) {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay    = getFirstDayOfMonth(year, month);
+  const gridRef = useRef();
 
   const eventsByDate = useMemo(() => {
     const map = {};
@@ -80,24 +141,53 @@ export default function MonthCalendar({
     return map;
   }, [events]);
 
-  // ─── スワイプ検知 ─────────────────────
-  const swipeStart = useRef({ x: 0, y: 0, t: 0 });
+  // ─── ネイティブイベントでスワイプ検知 ───
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
 
-  const handleTouchStart = (e) => {
-    const t = e.touches[0];
-    swipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
-  };
+    let startX = 0, startY = 0, startT = 0;
+    let captured = false;
 
-  const handleTouchEnd = (e) => {
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipeStart.current.x;
-    const dy = t.clientY - swipeStart.current.y;
-    const dt = Date.now() - swipeStart.current.t;
-    // 横方向に60px以上、縦方向は50px未満、500ms以内
-    if (Math.abs(dx) > 60 && Math.abs(dy) < 50 && dt < 500) {
-      onSwipeMonth?.(dx > 0 ? -1 : 1);
-    }
-  };
+    const onStart = (e) => {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      startT = Date.now();
+      captured = false;
+    };
+
+    const onMove = (e) => {
+      if (captured) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      // 横方向の動きが縦方向より明らかに大きい場合のみキャプチャ
+      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        captured = true;
+      }
+    };
+
+    const onEnd = (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      const dt = Date.now() - startT;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 600) {
+        onSwipeMonth?.(dx > 0 ? -1 : 1);
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: true });
+    el.addEventListener('touchend', onEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+    };
+  }, [onSwipeMonth]);
 
   const emptyCells = Array(firstDay).fill(null);
 
@@ -110,11 +200,7 @@ export default function MonthCalendar({
           </div>
         ))}
       </div>
-      <div
-        className="cal-grid"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div className="cal-grid" ref={gridRef}>
         {emptyCells.map((_, i) => (
           <div key={`e${i}`} className="cal-cell cal-cell-empty" />
         ))}

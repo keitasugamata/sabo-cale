@@ -66,7 +66,7 @@ export default function App() {
   const {
     events, loading,
     addEvent, updateEvent, updateAllRecurring,
-    removeEvent, removeAllRecurring,
+    removeEvent, removeAllRecurring, removeAllEvents,
     toggleComplete,
     getEventsForDate, getEventsForMonth, importEvents,
   } = useEvents(user);
@@ -295,11 +295,12 @@ export default function App() {
 
       {screen === 'sync' && (
         <SyncModal
-          events={monthEvents}
+          events={events}
           year={year} month={month}
           onImport={importEvents}
           onUpdateEvent={updateEvent}
           onCalendarsRefresh={refreshGoogleCals}
+          onDeleteAll={removeAllEvents}
           onClose={() => setScreen('calendar')}
         />
       )}

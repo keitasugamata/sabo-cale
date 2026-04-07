@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, LogOut, Check, AlertCircle, CloudOff } from 'lucide-react';
+import { X, RefreshCw, LogOut, Check, AlertCircle, CloudOff, Trash2 } from 'lucide-react';
 import {
   isConfigured,
   initGoogleCalendar,
@@ -14,10 +14,11 @@ import {
 import { getSetting, saveSetting } from '../db';
 import { generateId } from '../utils/dateUtils';
 
-export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onCalendarsRefresh, onClose }) {
+export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onCalendarsRefresh, onDeleteAll, onClose }) {
   const configured = isConfigured();
   const [signedIn, setSignedIn] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [calendars, setCalendars] = useState([]);
@@ -240,6 +241,46 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
                 両方のカレンダーを統合する方法を推奨します。
               </p>
             </div>
+          </section>
+
+          {/* 危険ゾーン */}
+          <section className="modal-section danger-zone">
+            <h3 className="sync-service-title" style={{ color: 'var(--danger)' }}>
+              ⚠️ 危険ゾーン
+            </h3>
+            <p className="sync-hint">
+              全イベント（{events.length}件）を完全に削除します。元に戻せません。
+            </p>
+            {confirmDelete ? (
+              <div className="delete-confirm-row">
+                <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600 }}>
+                  本当に{events.length}件すべて削除しますか？
+                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn btn-danger"
+                    onClick={async () => {
+                      await onDeleteAll();
+                      setConfirmDelete(false);
+                      setStatus('全イベントを削除しました');
+                    }}
+                  >
+                    <Trash2 size={14} /> 削除する
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="btn btn-ghost"
+                onClick={() => setConfirmDelete(true)}
+                style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              >
+                <Trash2 size={14} /> 全イベントを削除
+              </button>
+            )}
           </section>
 
           {status && <p className="sync-status success">✅ {status}</p>}
