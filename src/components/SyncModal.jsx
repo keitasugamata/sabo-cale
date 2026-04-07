@@ -21,12 +21,20 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [calendars, setCalendars] = useState([]);
-  const [selectedCalId, setSelectedCalId] = useState('primary');
+  const [sourceCalIds, setSourceCalIds] = useState([]); // 取得元（複数）
+  const [pushCalId, setPushCalId] = useState('primary'); // 送信先（1つ）
   const [initializing, setInitializing] = useState(false);
 
+  // 設定読み込み
   useEffect(() => {
-    getSetting('googleCalendarId').then((id) => { if (id) setSelectedCalId(id); });
-    if (configured && isInitialized()) setSignedIn(isSignedIn());
+    getSetting('googleSourceCalIds').then((ids) => {
+      if (Array.isArray(ids) && ids.length) setSourceCalIds(ids);
+    });
+    getSetting('googlePushCalId').then((id) => { if (id) setPushCalId(id); });
+    if (configured && isInitialized() && isSignedIn()) {
+      setSignedIn(true);
+      listCalendars().then(setCalendars).catch(() => {});
+    }
   }, []);
 
   async function handleSignIn() {
@@ -38,6 +46,10 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
       setSignedIn(true);
       const cals = await listCalendars();
       setCalendars(cals);
+      // 初回ログイン時、取得元が未設定なら全部チェック
+      if (sourceCalIds.length === 0) {
+        setSourceCalIds(cals.map((c) => c.id));
+      }
     } catch (e) {
       setError('ログイン失敗: ' + (e.message || e));
     } finally {
@@ -52,6 +64,15 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
     setCalendars([]);
   }
 
+  function toggleSource(calId) {
+    setSourceCalIds((prev) =>
+      prev.includes(calId) ? prev.filter((id) => id !== calId) : [...prev, calId]
+    );
+  }
+
+  function selectAllSources() { setSourceCalIds(calendars.map((c) => c.id)); }
+  function clearAllSources() { setSourceCalIds([]); }
+
   async function handlePush() {
     setSyncing(true); setError(''); setStatus('');
     try {
@@ -59,12 +80,13 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
       const monthEvents = events.filter((e) => e.date.startsWith(prefix));
       let count = 0;
       for (const ev of monthEvents) {
-        const result = await pushEventToGoogle(ev, selectedCalId);
+        const result = await pushEventToGoogle(ev, pushCalId);
         if (!ev.googleEventId) onUpdateEvent(ev.id, { googleEventId: result.id });
         count++;
       }
-      await saveSetting('googleCalendarId', selectedCalId);
-      setStatus(`${count}件をGoogleに送信しました`);
+      await saveSetting('googlePushCalId', pushCalId);
+      const calName = calendars.find((c) => c.id === pushCalId)?.summary || pushCalId;
+      setStatus(`${count}件を「${calName}」に送信しました`);
     } catch (e) {
       setError('送信失敗: ' + (e.message || e));
     }
@@ -74,11 +96,28 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
   async function handlePull() {
     setSyncing(true); setError(''); setStatus('');
     try {
-      const googleEvents = await fetchGoogleEvents(selectedCalId, year, month);
-      const newEvents = googleEvents.map((ev) => ({ ...ev, id: generateId() }));
-      await onImport(newEvents);
-      await saveSetting('googleCalendarId', selectedCalId);
-      setStatus(`${newEvents.length}件をインポートしました`);
+      if (sourceCalIds.length === 0) {
+        setError('取得元カレンダーを1つ以上選択してください');
+        setSyncing(false);
+        return;
+      }
+      let totalImported = 0;
+      const allNew = [];
+      for (const calId of sourceCalIds) {
+        const googleEvents = await fetchGoogleEvents(calId, year, month);
+        const calColor = calendars.find((c) => c.id === calId)?.backgroundColor || '#4285F4';
+        const newEvents = googleEvents.map((ev) => ({
+          ...ev,
+          id: generateId(),
+          color: calColor,
+          sourceCalendarId: calId,
+        }));
+        allNew.push(...newEvents);
+        totalImported += newEvents.length;
+      }
+      await onImport(allNew);
+      await saveSetting('googleSourceCalIds', sourceCalIds);
+      setStatus(`${sourceCalIds.length}個のカレンダーから${totalImported}件をインポートしました`);
     } catch (e) {
       setError('取得失敗: ' + (e.message || e));
     }
@@ -96,17 +135,14 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
 
         <div className="modal-body">
           {!configured ? (
-            /* 開発者がキー未設定 */
             <div className="sync-not-configured">
               <CloudOff size={32} color="var(--text-muted)" />
               <p>Google連携が設定されていません</p>
               <p className="sync-hint">
                 アプリ管理者が <code>.env</code> にAPIキーとクライアントIDを設定する必要があります。
-                詳しくは <code>.env.example</code> を参照してください。
               </p>
             </div>
           ) : !signedIn ? (
-            /* ログイン前 */
             <div className="sync-login-area">
               <div className="sync-google-logo">
                 <img
@@ -124,7 +160,6 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
               </button>
             </div>
           ) : (
-            /* ログイン済み */
             <div className="sync-controls">
               <div className="sync-signed-in">
                 <Check size={14} color="var(--success)" />
@@ -135,30 +170,65 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
               </div>
 
               {calendars.length > 0 && (
-                <select
-                  className="sync-input"
-                  value={selectedCalId}
-                  onChange={(e) => setSelectedCalId(e.target.value)}
-                >
-                  {calendars.map((c) => (
-                    <option key={c.id} value={c.id}>{c.summary}</option>
-                  ))}
-                </select>
+                <>
+                  {/* 取得元（複数） */}
+                  <div className="cal-sub-section">
+                    <div className="cal-sub-header">
+                      <label className="section-label" style={{ margin: 0 }}>取得元カレンダー</label>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={selectAllSources}>全選択</button>
+                        <button className="btn btn-ghost btn-sm" onClick={clearAllSources}>クリア</button>
+                      </div>
+                    </div>
+                    <div className="cal-checklist">
+                      {calendars.map((c) => (
+                        <label key={c.id} className="cal-check-row">
+                          <input
+                            type="checkbox"
+                            checked={sourceCalIds.includes(c.id)}
+                            onChange={() => toggleSource(c.id)}
+                          />
+                          <span
+                            className="cal-color-dot"
+                            style={{ background: c.backgroundColor || '#4285F4' }}
+                          />
+                          <span className="cal-name">{c.summary}</span>
+                          {c.primary && <span className="cal-badge">メイン</span>}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 送信先（1つ） */}
+                  <div className="cal-sub-section">
+                    <label className="section-label">新規予定の送信先</label>
+                    <select
+                      className="sync-input"
+                      value={pushCalId}
+                      onChange={(e) => setPushCalId(e.target.value)}
+                    >
+                      {calendars
+                        .filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>{c.summary}</option>
+                        ))}
+                    </select>
+                  </div>
+                </>
               )}
 
               <div className="sync-btn-row">
-                <button className="btn btn-primary" onClick={handlePush} disabled={syncing}>
+                <button className="btn btn-ghost" onClick={handlePull} disabled={syncing || sourceCalIds.length === 0}>
                   <RefreshCw size={14} className={syncing ? 'spin' : ''} />
-                  Googleへ送信（{month + 1}月）
+                  Googleから取得（{sourceCalIds.length}個）
                 </button>
-                <button className="btn btn-ghost" onClick={handlePull} disabled={syncing}>
-                  Googleから取得
+                <button className="btn btn-primary" onClick={handlePush} disabled={syncing}>
+                  Googleへ送信（{month + 1}月）
                 </button>
               </div>
             </div>
           )}
 
-          {/* iCloud */}
           <section className="modal-section" style={{ marginTop: 24 }}>
             <h3 className="sync-service-title">☁️ iCloud カレンダー</h3>
             <div className="icloud-note">
