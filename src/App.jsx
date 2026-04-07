@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Tag, Share2, RefreshCw, Moon, Sun, Type } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Tag, Share2, RefreshCw, Moon, Sun, Type, User, LogIn } from 'lucide-react';
 import MonthCalendar from './components/MonthCalendar';
 import DayDetail from './components/DayDetail';
 import EventModal from './components/EventModal';
 import TagManager from './components/TagManager';
 import ExportModal from './components/ExportModal';
 import SyncModal from './components/SyncModal';
+import AuthModal from './components/AuthModal';
 import { useEvents } from './hooks/useEvents';
 import { useTags } from './hooks/useTags';
+import { supabase } from './supabase';
 import { MONTHS_JP, addMonths, toDateString } from './utils/dateUtils';
 
 const CHIP_SIZES = ['xs', 's', 'm', 'l'];
@@ -24,6 +26,22 @@ export default function App() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [showSizePicker, setShowSizePicker] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // 認証
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    if (!supabase) { setAuthReady(true); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_, session) => setUser(session?.user ?? null)
+    );
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ダークモード
   const [darkMode, setDarkMode] = useState(() => {
@@ -49,9 +67,13 @@ export default function App() {
     removeEvent, removeAllRecurring,
     toggleComplete,
     getEventsForDate, getEventsForMonth, importEvents,
-  } = useEvents();
+  } = useEvents(user);
 
-  const { tags, addTag, removeTag, updateTag, getTagsByCategory, incrementUsage } = useTags();
+  const { tags, addTag, removeTag, updateTag, getTagsByCategory, incrementUsage } = useTags(user);
+
+  async function handleSignOut() {
+    if (supabase) await supabase.auth.signOut();
+  }
 
   const withTags   = getTagsByCategory('with');
   const whatTags   = getTagsByCategory('what');
@@ -171,6 +193,16 @@ export default function App() {
           <button className="icon-btn" onClick={() => setScreen('tags')} title="タグ管理"><Tag size={17} /></button>
           <button className="icon-btn" onClick={() => setScreen('sync')} title="同期"><RefreshCw size={17} /></button>
           <button className="icon-btn" onClick={() => setScreen('export')} title="エクスポート"><Share2 size={17} /></button>
+          {user ? (
+            <button className="icon-btn user-btn" onClick={handleSignOut} title={`${user.email} (タップでログアウト)`}>
+              <User size={17} />
+              <span className="user-dot" />
+            </button>
+          ) : (
+            <button className="icon-btn" onClick={() => setShowAuthModal(true)} title="ログイン">
+              <LogIn size={17} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -226,6 +258,8 @@ export default function App() {
           onClose={() => setScreen('calendar')}
         />
       )}
+
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }

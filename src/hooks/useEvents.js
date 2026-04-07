@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getAllEvents, saveEvent, deleteEvent as dbDeleteEvent } from '../db';
+import {
+  cloudGetAllEvents, cloudSaveEvent, cloudSaveEvents, cloudDeleteEvent, cloudDeleteEvents,
+} from '../cloudDb';
 import { isEventPast, generateId } from '../utils/dateUtils';
 
 function generateRecurringInstances(master, type) {
   const instances = [];
   const start = new Date(master.date + 'T00:00:00');
   const end = new Date(start);
-  end.setMonth(end.getMonth() + 6); // 6ヶ月分生成
+  end.setMonth(end.getMonth() + 6);
 
   let cur = new Date(start);
   let first = true;
@@ -22,71 +25,84 @@ function generateRecurringInstances(master, type) {
     });
     first = false;
 
-    if (type === 'daily') {
-      cur.setDate(cur.getDate() + 1);
-    } else if (type === 'weekly') {
-      cur.setDate(cur.getDate() + 7);
-    } else if (type === 'monthly') {
-      cur.setMonth(cur.getMonth() + 1);
-    } else if (type === 'weekday') {
+    if (type === 'daily') cur.setDate(cur.getDate() + 1);
+    else if (type === 'weekly') cur.setDate(cur.getDate() + 7);
+    else if (type === 'monthly') cur.setMonth(cur.getMonth() + 1);
+    else if (type === 'weekday') {
       do { cur.setDate(cur.getDate() + 1); }
       while (cur.getDay() === 0 || cur.getDay() === 6);
-    } else {
-      break;
-    }
+    } else break;
   }
-
   return instances;
 }
 
-export function useEvents() {
+export function useEvents(user) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const isCloud = !!user;
 
+  // 読み込み（ユーザー切替時にリロード）
   useEffect(() => {
-    getAllEvents().then((data) => {
-      setEvents(data);
+    setLoading(true);
+    const loader = isCloud ? cloudGetAllEvents(user.id) : getAllEvents();
+    loader.then((data) => {
+      setEvents(data || []);
       setLoading(false);
-    });
-  }, []);
+    }).catch(() => setLoading(false));
+  }, [isCloud, user?.id]);
 
   // 自動完了チェック
   useEffect(() => {
     if (loading) return;
     const toComplete = events.filter((ev) => !ev.completed && !ev.fromGoogle && isEventPast(ev));
     if (!toComplete.length) return;
-    Promise.all(
-      toComplete.map((ev) => {
-        const updated = { ...ev, completed: true };
-        return saveEvent(updated).then(() => updated);
-      })
-    ).then((updated) => {
-      setEvents((prev) => prev.map((ev) => updated.find((u) => u.id === ev.id) ?? ev));
-    });
+    const updated = toComplete.map((ev) => ({ ...ev, completed: true }));
+    if (isCloud) cloudSaveEvents(updated, user.id).catch(() => {});
+    else updated.forEach((ev) => saveEvent(ev));
+    setEvents((prev) => prev.map((ev) => updated.find((u) => u.id === ev.id) ?? ev));
   }, [loading]);
+
+  const persistEvent = useCallback(async (ev) => {
+    if (isCloud) await cloudSaveEvent(ev, user.id);
+    else await saveEvent(ev);
+  }, [isCloud, user?.id]);
+
+  const persistMany = useCallback(async (evs) => {
+    if (isCloud) await cloudSaveEvents(evs, user.id);
+    else await Promise.all(evs.map(saveEvent));
+  }, [isCloud, user?.id]);
+
+  const removeOne = useCallback(async (id) => {
+    if (isCloud) await cloudDeleteEvent(id);
+    else await dbDeleteEvent(id);
+  }, [isCloud]);
+
+  const removeMany = useCallback(async (ids) => {
+    if (isCloud) await cloudDeleteEvents(ids);
+    else await Promise.all(ids.map(dbDeleteEvent));
+  }, [isCloud]);
 
   const addEvent = useCallback(async (eventData, recurrenceType = null) => {
     if (!recurrenceType) {
-      await saveEvent(eventData);
+      await persistEvent(eventData);
       setEvents((prev) => [...prev, eventData]);
       return eventData;
     }
     const instances = generateRecurringInstances(eventData, recurrenceType);
-    await Promise.all(instances.map(saveEvent));
+    await persistMany(instances);
     setEvents((prev) => [...prev, ...instances]);
     return instances[0];
-  }, []);
+  }, [persistEvent, persistMany]);
 
   const updateEvent = useCallback(async (id, patch) => {
     setEvents((prev) => {
       const updated = prev.map((ev) => ev.id === id ? { ...ev, ...patch } : ev);
       const target = updated.find((ev) => ev.id === id);
-      if (target) saveEvent(target);
+      if (target) persistEvent(target);
       return updated;
     });
-  }, []);
+  }, [persistEvent]);
 
-  // 繰り返しのすべてのインスタンスを更新（内容をpatchで上書き、日付は保持）
   const updateAllRecurring = useCallback(async (masterId, patch) => {
     setEvents((prev) => {
       const updated = prev.map((ev) =>
@@ -94,34 +110,33 @@ export function useEvents() {
           ? { ...ev, ...patch, date: ev.date, id: ev.id }
           : ev
       );
-      updated
-        .filter((ev) => ev.masterId === masterId || ev.id === masterId)
-        .forEach(saveEvent);
+      const targets = updated.filter((ev) => ev.masterId === masterId || ev.id === masterId);
+      persistMany(targets);
       return updated;
     });
-  }, []);
+  }, [persistMany]);
 
   const removeEvent = useCallback(async (id) => {
-    await dbDeleteEvent(id);
+    await removeOne(id);
     setEvents((prev) => prev.filter((ev) => ev.id !== id));
-  }, []);
+  }, [removeOne]);
 
   const removeAllRecurring = useCallback(async (masterId) => {
     setEvents((prev) => {
       const toDelete = prev.filter((ev) => ev.masterId === masterId || ev.id === masterId);
-      toDelete.forEach((ev) => dbDeleteEvent(ev.id));
+      removeMany(toDelete.map((e) => e.id));
       return prev.filter((ev) => ev.masterId !== masterId && ev.id !== masterId);
     });
-  }, []);
+  }, [removeMany]);
 
   const toggleComplete = useCallback(async (id) => {
     setEvents((prev) => {
       const updated = prev.map((ev) => ev.id === id ? { ...ev, completed: !ev.completed } : ev);
       const target = updated.find((ev) => ev.id === id);
-      if (target) saveEvent(target);
+      if (target) persistEvent(target);
       return updated;
     });
-  }, []);
+  }, [persistEvent]);
 
   const getEventsForDate = useCallback(
     (dateStr) => events.filter((ev) => ev.date === dateStr),
@@ -137,24 +152,18 @@ export function useEvents() {
   );
 
   const importEvents = useCallback(async (newEvents) => {
-    const saved = await Promise.all(newEvents.map((ev) => saveEvent(ev).then(() => ev)));
+    await persistMany(newEvents);
     setEvents((prev) => {
       const ids = new Set(prev.map((e) => e.id));
-      return [...prev, ...saved.filter((e) => !ids.has(e.id))];
+      return [...prev, ...newEvents.filter((e) => !ids.has(e.id))];
     });
-  }, []);
+  }, [persistMany]);
 
   return {
-    events,
-    loading,
-    addEvent,
-    updateEvent,
-    updateAllRecurring,
-    removeEvent,
-    removeAllRecurring,
+    events, loading,
+    addEvent, updateEvent, updateAllRecurring,
+    removeEvent, removeAllRecurring,
     toggleComplete,
-    getEventsForDate,
-    getEventsForMonth,
-    importEvents,
+    getEventsForDate, getEventsForMonth, importEvents,
   };
 }

@@ -1536,6 +1536,58 @@ body {
   justify-content: flex-end;
 }
 
+/* ─── 認証 ─────────────────────────────── */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.auth-divider::before, .auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-switch {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 0.82rem;
+  font-family: var(--font);
+  text-align: center;
+  padding: 6px;
+  margin-top: 4px;
+}
+
+.auth-switch:hover { text-decoration: underline; }
+
+.user-btn {
+  position: relative;
+}
+
+.user-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 1.5px solid var(--surface);
+}
+
 /* ─── Spin ────────────────────────────── */
 @keyframes spin {
   to { transform: rotate(360deg); }
