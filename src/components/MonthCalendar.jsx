@@ -125,7 +125,7 @@ function DayCell({ year, month, day, events, selected, onSelect, onLongPress, ge
 }
 
 export default function MonthCalendar({
-  year, month, events, selectedDate, onSelectDate,
+  year, month, slideDir, events, selectedDate, onSelectDate,
   onLongPressDate, onSwipeMonth, getChipColor,
 }) {
   const daysInMonth = getDaysInMonth(year, month);
@@ -200,7 +200,11 @@ export default function MonthCalendar({
           </div>
         ))}
       </div>
-      <div className="cal-grid" ref={gridRef}>
+      <div
+        className={`cal-grid slide-${slideDir || 'none'}`}
+        ref={gridRef}
+        key={`${year}-${month}`}
+      >
         {emptyCells.map((_, i) => (
           <div key={`e${i}`} className="cal-cell cal-cell-empty" />
         ))}

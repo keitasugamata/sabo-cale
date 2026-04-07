@@ -112,7 +112,11 @@ export default function App() {
     updateTag(tagId, { color: newColor });
   }
 
+  // 月遷移アニメーション方向
+  const [slideDir, setSlideDir] = useState(null);
+
   function navigate(delta) {
+    setSlideDir(delta > 0 ? 'next' : 'prev');
     const next = addMonths(year, month, delta);
     setYear(next.year);
     setMonth(next.month);
@@ -121,11 +125,20 @@ export default function App() {
   function handleAddEvent() { setEditingEvent(null); setShowEventModal(true); }
   function handleEditEvent(ev) { setEditingEvent(ev); setShowEventModal(true); }
 
-  // 日付の長押し → 予定追加
+  // 長押しポップアップ用
+  const [longPressPopup, setLongPressPopup] = useState(null);
+
+  // 日付の長押し → ポップアップ
   function handleLongPressDate(dateStr) {
-    setSelectedDate(dateStr);
+    setLongPressPopup({ date: dateStr });
+  }
+
+  function confirmAddFromPopup() {
+    if (!longPressPopup) return;
+    setSelectedDate(longPressPopup.date);
     setEditingEvent(null);
     setShowEventModal(true);
+    setLongPressPopup(null);
   }
 
   // スワイプで月移動
@@ -249,6 +262,7 @@ export default function App() {
       <main className="app-main">
         <MonthCalendar
           year={year} month={month}
+          slideDir={slideDir}
           events={monthEvents}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
@@ -306,6 +320,27 @@ export default function App() {
       )}
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+      {/* 長押し確認ポップアップ */}
+      {longPressPopup && (
+        <div className="lp-popup-overlay" onClick={() => setLongPressPopup(null)}>
+          <div className="lp-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="lp-popup-icon">📅</div>
+            <div className="lp-popup-date">
+              {longPressPopup.date.replace(/-/g, '/').replace(/^(\d+)\/(\d+)\/(\d+)$/, '$1年$2月$3日')}
+            </div>
+            <div className="lp-popup-msg">この日に予定を作成しますか？</div>
+            <div className="lp-popup-actions">
+              <button className="btn btn-ghost" onClick={() => setLongPressPopup(null)}>
+                キャンセル
+              </button>
+              <button className="btn btn-primary" onClick={confirmAddFromPopup}>
+                + 予定を作成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
