@@ -356,6 +356,9 @@ body {
   grid-template-columns: repeat(7, 1fr);
   grid-auto-rows: minmax(var(--cal-min-h), auto);
   border-left: 1px solid var(--border);
+  touch-action: pan-y; /* 縦スクロール許可・横スワイプ検知 */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* 各日セル */

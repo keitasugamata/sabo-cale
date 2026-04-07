@@ -90,8 +90,12 @@ export default function App() {
   const monthEvents = getEventsForMonth(year, month);
   const dayEvents   = selectedDate ? getEventsForDate(selectedDate) : [];
 
-  // 「何をする」タグの色をライブに反映する関数
+  // チップ色：Google カレンダー > 何をする > 誰と > イベント色
   const getChipColor = useCallback((event) => {
+    if (event.googleCalendarId) {
+      const cal = googleCalendars.find((c) => c.id === event.googleCalendarId);
+      if (cal?.backgroundColor) return cal.backgroundColor;
+    }
     if (event.tags?.what) {
       const tag = whatTags.find((t) => t.label === event.tags.what);
       if (tag) return tag.color;
@@ -101,7 +105,7 @@ export default function App() {
       if (tag) return tag.color;
     }
     return event.color || '#7C3AED';
-  }, [whatTags, withTags]);
+  }, [whatTags, withTags, googleCalendars]);
 
   // タグ色変更ハンドラ
   function handleTagColorChange(tagId, newColor) {
@@ -116,6 +120,18 @@ export default function App() {
 
   function handleAddEvent() { setEditingEvent(null); setShowEventModal(true); }
   function handleEditEvent(ev) { setEditingEvent(ev); setShowEventModal(true); }
+
+  // 日付の長押し → 予定追加
+  function handleLongPressDate(dateStr) {
+    setSelectedDate(dateStr);
+    setEditingEvent(null);
+    setShowEventModal(true);
+  }
+
+  // スワイプで月移動
+  function handleSwipeMonth(delta) {
+    navigate(delta);
+  }
 
   async function handleSaveEvent(eventData, withTag, whatTag, whereTag, recurrenceType, editScope) {
     // Google カレンダー送信（指定があれば）
@@ -236,6 +252,8 @@ export default function App() {
           events={monthEvents}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
+          onLongPressDate={handleLongPressDate}
+          onSwipeMonth={handleSwipeMonth}
           getChipColor={getChipColor}
         />
         {selectedDate && (

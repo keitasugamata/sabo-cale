@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   getDaysInMonth,
   getFirstDayOfMonth,
@@ -7,8 +7,9 @@ import {
   isPastDate,
   DAYS_JP,
 } from '../utils/dateUtils';
+import { useLongPress } from '../hooks/useLongPress';
 
-const MAX_CHIPS = 20; // 制限はCSSのセル高で自然に効く
+const MAX_CHIPS = 20;
 
 function EventChip({ event, getChipColor }) {
   const bg = event.completed ? 'var(--chip-done)' : getChipColor(event);
@@ -20,7 +21,7 @@ function EventChip({ event, getChipColor }) {
   );
 }
 
-function DayCell({ year, month, day, events, selected, onSelect, getChipColor }) {
+function DayCell({ year, month, day, events, selected, onSelect, onLongPress, getChipColor }) {
   const dateStr = toDateString(year, month, day);
   const today   = isToday(year, month, day);
   const past    = isPastDate(year, month, day);
@@ -39,10 +40,16 @@ function DayCell({ year, month, day, events, selected, onSelect, getChipColor })
     isSel && !today ? 'sel-num' : '',
   ].filter(Boolean).join(' ');
 
+  const longPress = useLongPress(
+    () => onLongPress(dateStr),
+    () => onSelect(dateStr),
+    { ms: 450 }
+  );
+
   return (
     <div
       className={['cal-cell', isSel ? 'selected' : ''].filter(Boolean).join(' ')}
-      onClick={() => onSelect(dateStr)}
+      {...longPress}
     >
       <div className="cal-day-header">
         <span className={numClass}>{day}</span>
@@ -57,7 +64,10 @@ function DayCell({ year, month, day, events, selected, onSelect, getChipColor })
   );
 }
 
-export default function MonthCalendar({ year, month, events, selectedDate, onSelectDate, getChipColor }) {
+export default function MonthCalendar({
+  year, month, events, selectedDate, onSelectDate,
+  onLongPressDate, onSwipeMonth, getChipColor,
+}) {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay    = getFirstDayOfMonth(year, month);
 
@@ -70,6 +80,25 @@ export default function MonthCalendar({ year, month, events, selectedDate, onSel
     return map;
   }, [events]);
 
+  // ─── スワイプ検知 ─────────────────────
+  const swipeStart = useRef({ x: 0, y: 0, t: 0 });
+
+  const handleTouchStart = (e) => {
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStart.current.x;
+    const dy = t.clientY - swipeStart.current.y;
+    const dt = Date.now() - swipeStart.current.t;
+    // 横方向に60px以上、縦方向は50px未満、500ms以内
+    if (Math.abs(dx) > 60 && Math.abs(dy) < 50 && dt < 500) {
+      onSwipeMonth?.(dx > 0 ? -1 : 1);
+    }
+  };
+
   const emptyCells = Array(firstDay).fill(null);
 
   return (
@@ -81,7 +110,11 @@ export default function MonthCalendar({ year, month, events, selectedDate, onSel
           </div>
         ))}
       </div>
-      <div className="cal-grid">
+      <div
+        className="cal-grid"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {emptyCells.map((_, i) => (
           <div key={`e${i}`} className="cal-cell cal-cell-empty" />
         ))}
@@ -94,6 +127,7 @@ export default function MonthCalendar({ year, month, events, selectedDate, onSel
             events={eventsByDate[toDateString(year, month, day)] || []}
             selected={selectedDate}
             onSelect={onSelectDate}
+            onLongPress={onLongPressDate}
             getChipColor={getChipColor}
           />
         ))}
