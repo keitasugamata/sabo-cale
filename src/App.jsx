@@ -9,7 +9,9 @@ import SyncModal from './components/SyncModal';
 import AuthModal from './components/AuthModal';
 import { useEvents } from './hooks/useEvents';
 import { useTags } from './hooks/useTags';
+import { useGoogleCalendars } from './hooks/useGoogleCalendars';
 import { supabase } from './supabase';
+import { getSetting, saveSetting } from './db';
 import { MONTHS_JP, addMonths, toDateString } from './utils/dateUtils';
 
 const CHIP_SIZES = ['xs', 's', 'm', 'l'];
@@ -71,6 +73,13 @@ export default function App() {
 
   const { tags, addTag, removeTag, updateTag, getTagsByCategory, incrementUsage } = useTags(user);
 
+  // Google カレンダー
+  const { calendars: googleCalendars, refresh: refreshGoogleCals, push: pushToGoogle } = useGoogleCalendars();
+  const [defaultPushCalId, setDefaultPushCalId] = useState('');
+  useEffect(() => {
+    getSetting('googlePushCalId').then((id) => { if (id) setDefaultPushCalId(id); });
+  }, []);
+
   async function handleSignOut() {
     if (supabase) await supabase.auth.signOut();
   }
@@ -109,6 +118,21 @@ export default function App() {
   function handleEditEvent(ev) { setEditingEvent(ev); setShowEventModal(true); }
 
   async function handleSaveEvent(eventData, withTag, whatTag, whereTag, recurrenceType, editScope) {
+    // Google カレンダー送信（指定があれば）
+    if (eventData.googleCalendarId) {
+      try {
+        const result = await pushToGoogle(eventData, eventData.googleCalendarId);
+        eventData.googleEventId = result.id;
+        if (eventData.googleCalendarId !== defaultPushCalId) {
+          setDefaultPushCalId(eventData.googleCalendarId);
+          saveSetting('googlePushCalId', eventData.googleCalendarId);
+        }
+      } catch (e) {
+        console.error('Google送信失敗:', e);
+        alert('Googleカレンダーへの送信に失敗しました（ローカルには保存されます）');
+      }
+    }
+
     if (editingEvent) {
       if (editScope === 'all' && (editingEvent.masterId || editingEvent.recurrenceType)) {
         const masterId = editingEvent.masterId || editingEvent.id;
@@ -232,6 +256,8 @@ export default function App() {
           withTags={withTags}
           whatTags={whatTags}
           whereTags={whereTags}
+          googleCalendars={googleCalendars}
+          defaultPushCalId={defaultPushCalId}
           onSave={handleSaveEvent}
           onDelete={removeEvent}
           onDeleteAll={removeAllRecurring}
@@ -255,6 +281,7 @@ export default function App() {
           year={year} month={month}
           onImport={importEvents}
           onUpdateEvent={updateEvent}
+          onCalendarsRefresh={refreshGoogleCals}
           onClose={() => setScreen('calendar')}
         />
       )}

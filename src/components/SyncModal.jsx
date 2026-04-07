@@ -14,7 +14,7 @@ import {
 import { getSetting, saveSetting } from '../db';
 import { generateId } from '../utils/dateUtils';
 
-export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onClose }) {
+export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onCalendarsRefresh, onClose }) {
   const configured = isConfigured();
   const [signedIn, setSignedIn] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -46,6 +46,7 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
       setSignedIn(true);
       const cals = await listCalendars();
       setCalendars(cals);
+      onCalendarsRefresh?.();
       // 初回ログイン時、取得元が未設定なら全部チェック
       if (sourceCalIds.length === 0) {
         setSourceCalIds(cals.map((c) => c.id));

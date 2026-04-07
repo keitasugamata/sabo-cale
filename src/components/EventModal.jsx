@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Clock, Users, Zap, MapPin, ChevronDown, Plus, Search, RotateCcw } from 'lucide-react';
+import { X, Clock, Users, Zap, MapPin, ChevronDown, Plus, Search, RotateCcw, Calendar } from 'lucide-react';
 import { generateId, formatDuration, formatDateJP } from '../utils/dateUtils';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -108,6 +108,7 @@ function InlineTagSelector({ icon, label, value, tags, onChange, onCreateTag }) 
 // ─── メインモーダル ────────────────────────────
 export default function EventModal({
   date, event, withTags, whatTags, whereTags,
+  googleCalendars = [], defaultPushCalId = '',
   onSave, onDelete, onDeleteAll, onCreateTag, onClose,
 }) {
   const isEdit = !!event;
@@ -125,6 +126,14 @@ export default function EventModal({
   const [showMemo, setShowMemo] = useState(!!(event?.preMemo || event?.retrospectiveMemo));
   const [recurrence, setRecurrence] = useState(event?.recurrenceType ?? null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Google カレンダー送信先（'' = 送信しない）
+  const writableCals = googleCalendars.filter(
+    (c) => c.accessRole === 'owner' || c.accessRole === 'writer'
+  );
+  const [googleCalId, setGoogleCalId] = useState(
+    event?.googleCalendarId ?? (isEdit ? '' : defaultPushCalId)
+  );
 
   // インラインで追加されたタグをローカルにマージ
   const [localTags, setLocalTags] = useState({ with: withTags, what: whatTags, where: whereTags });
@@ -146,6 +155,8 @@ export default function EventModal({
   function handleSave(editScope = 'single') {
     const ev = {
       id: event?.id || generateId(),
+      googleCalendarId: googleCalId || undefined,
+      googleEventId: event?.googleEventId,
       title,
       date,
       startTime,
@@ -226,6 +237,23 @@ export default function EventModal({
               ))}
             </div>
           </section>
+
+          {/* Google カレンダー送信先 */}
+          {writableCals.length > 0 && (
+            <section className="modal-section">
+              <label className="section-label"><Calendar size={14} /> Googleカレンダーに送信</label>
+              <select
+                className="sync-input"
+                value={googleCalId}
+                onChange={(e) => setGoogleCalId(e.target.value)}
+              >
+                <option value="">送信しない（ローカルのみ）</option>
+                {writableCals.map((c) => (
+                  <option key={c.id} value={c.id}>{c.summary}</option>
+                ))}
+              </select>
+            </section>
+          )}
 
           {/* メモ */}
           <section className="modal-section">
