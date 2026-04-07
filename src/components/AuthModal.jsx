@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Cloud, AlertCircle, Check } from 'lucide-react';
 import { supabase } from '../supabase';
 
@@ -9,6 +9,15 @@ export default function AuthModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+
+  // ログイン成功を検知して自動的にモーダルを閉じる
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) onClose();
+    });
+    return () => subscription.unsubscribe();
+  }, [onClose]);
 
   async function handleGoogle() {
     setError(''); setLoading(true);
@@ -29,15 +38,28 @@ export default function AuthModal({ onClose }) {
     setError(''); setInfo(''); setLoading(true);
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setInfo('登録メールを送りました。受信トレイを確認してください。');
+        if (data.session) {
+          // メール確認OFFの場合、即ログイン
+          setInfo('登録完了！ログインしました');
+        } else {
+          // メール確認ON
+          setInfo('📧 登録メールを送信しました。受信トレイのリンクをクリックして確認後、ログインしてください。');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
     } catch (e) {
-      setError(e.message || String(e));
+      const msg = e.message || String(e);
+      if (msg.includes('Email not confirmed')) {
+        setError('メール確認が完了していません。受信メール内のリンクをクリックしてください');
+      } else if (msg.includes('Invalid login')) {
+        setError('メールアドレスまたはパスワードが正しくありません');
+      } else {
+        setError(msg);
+      }
     }
     setLoading(false);
   }
