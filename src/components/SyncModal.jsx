@@ -249,7 +249,9 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
               ⚠️ 危険ゾーン
             </h3>
             <p className="sync-hint">
-              全イベント（{events.length}件）を完全に削除します。元に戻せません。
+              サボカレ上の全イベント（{events.length}件）を削除します。<br />
+              <strong>※ Googleカレンダー側の元データは消えません。</strong><br />
+              再インポートすれば元に戻せます。
             </p>
             {confirmDelete ? (
               <div className="delete-confirm-row">
