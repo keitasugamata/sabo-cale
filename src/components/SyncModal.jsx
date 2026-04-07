@@ -14,7 +14,7 @@ import {
 import { getSetting, saveSetting } from '../db';
 import { generateId } from '../utils/dateUtils';
 
-export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onCalendarsRefresh, onDeleteAll, onClose }) {
+export default function SyncModal({ events, year, month, onImport, onUpdateEvent, onCalendarsRefresh, onSourceCalsChange, onDeleteAll, onClose }) {
   const configured = isConfigured();
   const [signedIn, setSignedIn] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -67,13 +67,26 @@ export default function SyncModal({ events, year, month, onImport, onUpdateEvent
   }
 
   function toggleSource(calId) {
-    setSourceCalIds((prev) =>
-      prev.includes(calId) ? prev.filter((id) => id !== calId) : [...prev, calId]
-    );
+    setSourceCalIds((prev) => {
+      const next = prev.includes(calId) ? prev.filter((id) => id !== calId) : [...prev, calId];
+      saveSetting('googleSourceCalIds', next);
+      onSourceCalsChange?.(next);
+      return next;
+    });
   }
 
-  function selectAllSources() { setSourceCalIds(calendars.map((c) => c.id)); }
-  function clearAllSources() { setSourceCalIds([]); }
+  function selectAllSources() {
+    const next = calendars.map((c) => c.id);
+    setSourceCalIds(next);
+    saveSetting('googleSourceCalIds', next);
+    onSourceCalsChange?.(next);
+  }
+
+  function clearAllSources() {
+    setSourceCalIds([]);
+    saveSetting('googleSourceCalIds', []);
+    onSourceCalsChange?.([]);
+  }
 
   async function handlePush() {
     setSyncing(true); setError(''); setStatus('');

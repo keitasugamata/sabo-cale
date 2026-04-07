@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Tag, Share2, RefreshCw, Moon, Sun, Type, User, LogIn } from 'lucide-react';
 import MonthCalendar from './components/MonthCalendar';
 import DayDetail from './components/DayDetail';
@@ -12,7 +12,7 @@ import { useTags } from './hooks/useTags';
 import { useGoogleCalendars } from './hooks/useGoogleCalendars';
 import { supabase } from './supabase';
 import { getSetting, saveSetting } from './db';
-import { MONTHS_JP, addMonths, toDateString } from './utils/dateUtils';
+import { MONTHS_JP, addMonths, toDateString, generateId } from './utils/dateUtils';
 
 const CHIP_SIZES = ['xs', 's', 'm', 'l'];
 const CHIP_SIZE_LABELS = { xs: '極小', s: '小', m: '中', l: '大' };
@@ -74,11 +74,27 @@ export default function App() {
   const { tags, addTag, removeTag, updateTag, getTagsByCategory, incrementUsage } = useTags(user);
 
   // Google カレンダー
-  const { calendars: googleCalendars, refresh: refreshGoogleCals, push: pushToGoogle } = useGoogleCalendars();
+  const {
+    calendars: googleCalendars,
+    refresh: refreshGoogleCals,
+    push: pushToGoogle,
+    remove: deleteFromGoogle,
+    fetchAll: fetchGoogleCal,
+  } = useGoogleCalendars();
   const [defaultPushCalId, setDefaultPushCalId] = useState('');
+  const [sourceCalIds, setSourceCalIds] = useState([]);
+  const [autoSyncing, setAutoSyncing] = useState(false);
+
   useEffect(() => {
     getSetting('googlePushCalId').then((id) => { if (id) setDefaultPushCalId(id); });
+    getSetting('googleSourceCalIds').then((ids) => {
+      if (Array.isArray(ids)) setSourceCalIds(ids);
+    });
   }, []);
+
+  // 状態を ref で参照（自動同期の依存ループ防止）
+  const eventsRef = useRef([]);
+  useEffect(() => { eventsRef.current = events; }, [events]);
 
   async function handleSignOut() {
     if (supabase) await supabase.auth.signOut();
@@ -122,8 +138,109 @@ export default function App() {
     setMonth(next.month);
   }
 
+  // ─── 自動同期：Google → サボカレ ─────────────────
+  const syncFromGoogle = useCallback(async (yr = year, mo = month) => {
+    if (!googleCalendars.length || !sourceCalIds.length) return;
+    setAutoSyncing(true);
+    try {
+      // 1. 全ソースカレンダーから取得
+      const allGoogleEvents = [];
+      for (const calId of sourceCalIds) {
+        try {
+          const ge = await fetchGoogleCal(calId, yr, mo);
+          const cal = googleCalendars.find((c) => c.id === calId);
+          ge.forEach((e) => {
+            e.color = cal?.backgroundColor || '#4285F4';
+            e.googleCalendarId = calId;
+          });
+          allGoogleEvents.push(...ge);
+        } catch (e) { console.warn('Pull failed:', calId, e); }
+      }
+
+      // 2. 当月のローカルイベント（googleEventId 持ちのみ）
+      const prefix = `${yr}-${String(mo + 1).padStart(2, '0')}`;
+      const localMonth = eventsRef.current.filter((e) => e.date.startsWith(prefix));
+      const localByGid = new Map(
+        localMonth.filter((e) => e.googleEventId).map((e) => [e.googleEventId, e])
+      );
+      const googleGids = new Set(allGoogleEvents.map((e) => e.googleEventId));
+
+      // 3. Google にあって ローカルにない → 追加
+      const toAdd = allGoogleEvents
+        .filter((g) => !localByGid.has(g.googleEventId))
+        .map((g) => ({ ...g, id: generateId() }));
+
+      // 4. 両方にある → 更新
+      const toUpdate = allGoogleEvents
+        .filter((g) => localByGid.has(g.googleEventId))
+        .map((g) => {
+          const local = localByGid.get(g.googleEventId);
+          return {
+            ...local,
+            title: g.title,
+            date: g.date,
+            startTime: g.startTime,
+            duration: g.duration,
+            color: g.color,
+            googleCalendarId: g.googleCalendarId,
+          };
+        });
+
+      // 5. ローカルにあって Google にない → 削除
+      const toDelete = localMonth.filter(
+        (e) => e.googleEventId && !googleGids.has(e.googleEventId)
+      );
+
+      if (toAdd.length) await importEvents(toAdd);
+      for (const ev of toUpdate) await updateEvent(ev.id, ev);
+      for (const ev of toDelete) await removeEvent(ev.id);
+    } catch (e) {
+      console.error('自動同期失敗:', e);
+    }
+    setAutoSyncing(false);
+  }, [googleCalendars, sourceCalIds, year, month, fetchGoogleCal, importEvents, updateEvent, removeEvent]);
+
+  // 起動時 / フォーカス時 / 月切替時に自動同期
+  useEffect(() => {
+    if (googleCalendars.length > 0 && sourceCalIds.length > 0) {
+      syncFromGoogle(year, month);
+    }
+  }, [googleCalendars.length, sourceCalIds.length, year, month]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (googleCalendars.length > 0 && sourceCalIds.length > 0) {
+        syncFromGoogle();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [syncFromGoogle, googleCalendars.length, sourceCalIds.length]);
+
   function handleAddEvent() { setEditingEvent(null); setShowEventModal(true); }
   function handleEditEvent(ev) { setEditingEvent(ev); setShowEventModal(true); }
+
+  // 削除時、Google にもある予定なら Google 側からも削除
+  async function handleRemoveEvent(id) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (ev?.googleEventId && ev?.googleCalendarId) {
+      try {
+        await deleteFromGoogle(ev.googleEventId, ev.googleCalendarId);
+      } catch (e) { console.warn('Google delete failed:', e); }
+    }
+    await removeEvent(id);
+  }
+
+  async function handleRemoveAllRecurring(masterId) {
+    const targets = eventsRef.current.filter((e) => e.masterId === masterId || e.id === masterId);
+    for (const ev of targets) {
+      if (ev.googleEventId && ev.googleCalendarId) {
+        try { await deleteFromGoogle(ev.googleEventId, ev.googleCalendarId); }
+        catch (e) { console.warn('Google delete failed:', e); }
+      }
+    }
+    await removeAllRecurring(masterId);
+  }
 
   // 長押しポップアップ用
   const [longPressPopup, setLongPressPopup] = useState(null);
@@ -244,7 +361,9 @@ export default function App() {
             {darkMode ? <Sun size={17} /> : <Moon size={17} />}
           </button>
           <button className="icon-btn" onClick={() => setScreen('tags')} title="タグ管理"><Tag size={17} /></button>
-          <button className="icon-btn" onClick={() => setScreen('sync')} title="同期"><RefreshCw size={17} /></button>
+          <button className="icon-btn" onClick={() => setScreen('sync')} title="同期">
+            <RefreshCw size={17} className={autoSyncing ? 'spin' : ''} />
+          </button>
           <button className="icon-btn" onClick={() => setScreen('export')} title="エクスポート"><Share2 size={17} /></button>
           {user ? (
             <button className="icon-btn user-btn" onClick={handleSignOut} title={`${user.email} (タップでログアウト)`}>
@@ -291,8 +410,8 @@ export default function App() {
           googleCalendars={googleCalendars}
           defaultPushCalId={defaultPushCalId}
           onSave={handleSaveEvent}
-          onDelete={removeEvent}
-          onDeleteAll={removeAllRecurring}
+          onDelete={handleRemoveEvent}
+          onDeleteAll={handleRemoveAllRecurring}
           onCreateTag={handleCreateTag}
           onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
         />
@@ -314,6 +433,7 @@ export default function App() {
           onImport={importEvents}
           onUpdateEvent={updateEvent}
           onCalendarsRefresh={refreshGoogleCals}
+          onSourceCalsChange={setSourceCalIds}
           onDeleteAll={removeAllEvents}
           onClose={() => setScreen('calendar')}
         />
