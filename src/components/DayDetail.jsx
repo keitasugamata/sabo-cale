@@ -12,6 +12,14 @@ function getElapsedMs(tracking, now) {
   return ms;
 }
 
+function calcGapMinutes(prev, next) {
+  const [ph, pm] = prev.startTime.split(':').map(Number);
+  const prevEndMin = ph * 60 + pm + (prev.duration || 0);
+  const [nh, nm] = next.startTime.split(':').map(Number);
+  const nextStartMin = nh * 60 + nm;
+  return nextStartMin - prevEndMin;
+}
+
 function TimeEditPopup({ initialMinutes, onSave, onClose }) {
   const [minutes, setMinutes] = useState(initialMinutes);
   return (
@@ -40,7 +48,7 @@ function TimeEditPopup({ initialMinutes, onSave, onClose }) {
   );
 }
 
-function EventItem({ event, onToggle, onEdit, onStartTracking, onPauseTracking, onResumeTracking, onCompleteTracking, onEditTime }) {
+function TimelineEvent({ event, position, onToggle, onEdit, onStartTracking, onPauseTracking, onResumeTracking, onCompleteTracking, onEditTime }) {
   const tracking = event.tracking || null;
   const isRunning = tracking?.status === 'running';
   const isPaused = tracking?.status === 'paused';
@@ -52,13 +60,9 @@ function EventItem({ event, onToggle, onEdit, onStartTracking, onPauseTracking, 
 
   function handleCheckClick(e) {
     e.stopPropagation();
-    if (event.completed) {
-      onToggle(event.id);
-    } else if (hasTracking) {
-      onCompleteTracking(event.id);
-    } else {
-      onToggle(event.id);
-    }
+    if (event.completed) onToggle(event.id);
+    else if (hasTracking) onCompleteTracking(event.id);
+    else onToggle(event.id);
   }
 
   function handleTrackToggle(e) {
@@ -68,61 +72,67 @@ function EventItem({ event, onToggle, onEdit, onStartTracking, onPauseTracking, 
     else onStartTracking(event.id);
   }
 
+  const dotColor = event.color || '#7C3AED';
+
   return (
-    <div
-      className={`event-item ${event.completed ? 'completed' : ''} ${isRunning ? 'tracking' : ''}`}
-      style={{ borderLeftColor: event.color || '#7C3AED' }}
-    >
-      <button
-        className="event-check"
-        onClick={handleCheckClick}
-        aria-label={event.completed ? '未完了に戻す' : '完了'}
-      >
-        {event.completed ? <Check size={14} strokeWidth={3} /> : <span className="empty-check" />}
-      </button>
-
-      {/* 時間計測ボタン */}
-      {!event.completed && (
-        <button
-          className={`track-btn ${isRunning ? 'running' : ''} ${isPaused ? 'paused' : ''}`}
-          onClick={handleTrackToggle}
-          aria-label={isRunning ? '一時停止' : '計測開始'}
-        >
-          {isRunning ? <Pause size={13} strokeWidth={2.5} /> : <Play size={13} strokeWidth={2.5} />}
-        </button>
-      )}
-
-      <div className="event-info" onClick={() => onEdit(event)}>
-        <p className="event-title">
-          {event.completed ? '✅ ' : ''}{event.title}
-        </p>
-        <p className="event-meta">
-          {event.startTime} 〜 {formatDuration(event.duration)}
-        </p>
-        {hasTracking && !event.completed && (
-          <p className="event-tracking">
-            <span className={`track-time ${isRunning ? 'pulse' : ''}`}>
-              ⏱ {formatElapsed(elapsedMs)}
-            </span>
-            <button
-              className="icon-btn"
-              style={{ padding: 2, marginLeft: 4 }}
-              onClick={(e) => { e.stopPropagation(); setEditingTime(true); }}
-            >
-              <Edit3 size={11} />
-            </button>
-            {isRunning && <span className="track-status">進行中</span>}
-            {isPaused && <span className="track-status paused">一時停止</span>}
-          </p>
-        )}
-        {event.preMemo && (
-          <p className="event-memo-preview">{event.preMemo.slice(0, 40)}{event.preMemo.length > 40 ? '…' : ''}</p>
-        )}
+    <div className={`tl-row tl-event ${position}`}>
+      <div className="tl-time">{event.startTime}</div>
+      <div className="tl-line">
+        <span className="tl-dot" style={{ background: dotColor, borderColor: dotColor }} />
       </div>
+      <div className={`tl-content ${event.completed ? 'completed' : ''} ${isRunning ? 'tracking' : ''}`}>
+        <div className="tl-card">
+          <button
+            className="event-check"
+            onClick={handleCheckClick}
+            aria-label={event.completed ? '未完了に戻す' : '完了'}
+          >
+            {event.completed ? <Check size={14} strokeWidth={3} /> : <span className="empty-check" />}
+          </button>
 
-      <button className="icon-btn" onClick={() => onEdit(event)}>
-        <ChevronRight size={16} />
-      </button>
+          {!event.completed && (
+            <button
+              className={`track-btn ${isRunning ? 'running' : ''} ${isPaused ? 'paused' : ''}`}
+              onClick={handleTrackToggle}
+              aria-label={isRunning ? '一時停止' : '計測開始'}
+            >
+              {isRunning ? <Pause size={13} strokeWidth={2.5} /> : <Play size={13} strokeWidth={2.5} />}
+            </button>
+          )}
+
+          <div className="event-info" onClick={() => onEdit(event)}>
+            <p className="event-title">
+              {event.completed ? '✅ ' : ''}{event.title}
+            </p>
+            <p className="event-meta">{formatDuration(event.duration)}</p>
+            {hasTracking && !event.completed && (
+              <p className="event-tracking">
+                <span className={`track-time ${isRunning ? 'pulse' : ''}`}>
+                  ⏱ {formatElapsed(elapsedMs)}
+                </span>
+                <button
+                  className="icon-btn"
+                  style={{ padding: 2, marginLeft: 4 }}
+                  onClick={(e) => { e.stopPropagation(); setEditingTime(true); }}
+                >
+                  <Edit3 size={11} />
+                </button>
+                {isRunning && <span className="track-status">進行中</span>}
+                {isPaused && <span className="track-status paused">一時停止</span>}
+              </p>
+            )}
+            {event.preMemo && (
+              <p className="event-memo-preview">
+                {event.preMemo.slice(0, 40)}{event.preMemo.length > 40 ? '…' : ''}
+              </p>
+            )}
+          </div>
+
+          <button className="icon-btn" onClick={() => onEdit(event)}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
 
       {editingTime && (
         <TimeEditPopup
@@ -131,6 +141,18 @@ function EventItem({ event, onToggle, onEdit, onStartTracking, onPauseTracking, 
           onSave={(min) => onEditTime(event.id, min)}
         />
       )}
+    </div>
+  );
+}
+
+function TimelineGap({ minutes }) {
+  return (
+    <div className="tl-row tl-gap">
+      <div className="tl-time"></div>
+      <div className="tl-line"></div>
+      <div className="tl-content">
+        <span className="tl-gap-label">空き {formatDuration(minutes)}</span>
+      </div>
     </div>
   );
 }
@@ -157,20 +179,35 @@ export default function DayDetail({
           <button className="btn btn-ghost" onClick={onAdd}>+ 追加する</button>
         </div>
       ) : (
-        <div className="event-list">
-          {sorted.map((ev) => (
-            <EventItem
-              key={ev.id}
-              event={ev}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onStartTracking={onStartTracking}
-              onPauseTracking={onPauseTracking}
-              onResumeTracking={onResumeTracking}
-              onCompleteTracking={onCompleteTracking}
-              onEditTime={onEditTime}
-            />
-          ))}
+        <div className="timeline">
+          {sorted.map((ev, idx) => {
+            const isFirst = idx === 0;
+            const isLast = idx === sorted.length - 1;
+            const position = [
+              isFirst ? 'is-first' : '',
+              isLast ? 'is-last' : '',
+            ].filter(Boolean).join(' ');
+
+            const next = sorted[idx + 1];
+            const gap = next ? calcGapMinutes(ev, next) : 0;
+
+            return (
+              <React.Fragment key={ev.id}>
+                <TimelineEvent
+                  event={ev}
+                  position={position}
+                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onStartTracking={onStartTracking}
+                  onPauseTracking={onPauseTracking}
+                  onResumeTracking={onResumeTracking}
+                  onCompleteTracking={onCompleteTracking}
+                  onEditTime={onEditTime}
+                />
+                {next && gap > 0 && <TimelineGap minutes={gap} />}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
     </div>

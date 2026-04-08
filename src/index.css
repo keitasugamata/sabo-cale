@@ -537,7 +537,7 @@ body {
   flex-direction: column;
 }
 
-.event-item {
+.event-item, .tl-card {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -551,8 +551,98 @@ body {
 .event-item:last-child { border-bottom: none; }
 .event-item:hover { background: var(--surface2); }
 
+.tl-card {
+  border-bottom: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface2);
+}
+.tl-content.completed .tl-card { opacity: 0.55; }
+.tl-content.tracking .tl-card { background: rgba(124, 58, 237, 0.08); }
+
 .event-item.completed {
   opacity: 0.6;
+}
+
+/* ─── タイムライン ─────────────────────── */
+.timeline {
+  padding: 12px 12px 16px;
+}
+
+.tl-row {
+  display: grid;
+  grid-template-columns: 44px 22px 1fr;
+  gap: 8px;
+  align-items: stretch;
+  position: relative;
+}
+
+.tl-time {
+  text-align: right;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  padding-top: 12px;
+  white-space: nowrap;
+}
+
+.tl-line {
+  position: relative;
+  min-height: 28px;
+}
+
+.tl-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: var(--border);
+  transform: translateX(-50%);
+}
+
+/* 最初の行は線を上から始めない */
+.tl-event.is-first .tl-line::before {
+  top: 14px;
+}
+
+/* 最後の行は線を下まで延ばさない */
+.tl-event.is-last .tl-line::before {
+  bottom: calc(100% - 22px);
+}
+
+.tl-dot {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  border: 2.5px solid var(--surface);
+  box-shadow: 0 0 0 1.5px var(--border);
+}
+
+.tl-content {
+  padding: 4px 0;
+  min-width: 0;
+}
+
+.tl-gap .tl-content {
+  padding: 6px 0;
+}
+
+.tl-gap-label {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--surface2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
 }
 
 .event-check {
