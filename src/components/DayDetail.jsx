@@ -1,20 +1,97 @@
-import React from 'react';
-import { Plus, Check, ChevronRight } from 'lucide-react';
-import { formatDateJP, formatDuration } from '../utils/dateUtils';
+import React, { useState } from 'react';
+import { Plus, Check, ChevronRight, Play, Pause, Edit3 } from 'lucide-react';
+import { formatDateJP, formatDuration, formatElapsed } from '../utils/dateUtils';
+import { useNow } from '../hooks/useNow';
 
-function EventItem({ event, onToggle, onEdit }) {
+function getElapsedMs(tracking, now) {
+  if (!tracking) return 0;
+  let ms = tracking.accumulatedMs || 0;
+  if (tracking.status === 'running' && tracking.currentRunStartedAt) {
+    ms += now - tracking.currentRunStartedAt;
+  }
+  return ms;
+}
+
+function TimeEditPopup({ initialMinutes, onSave, onClose }) {
+  const [minutes, setMinutes] = useState(initialMinutes);
+  return (
+    <div className="lp-popup-overlay" onClick={onClose}>
+      <div className="lp-popup" onClick={(e) => e.stopPropagation()}>
+        <div className="lp-popup-icon">⏱</div>
+        <div className="lp-popup-msg">計測時間を編集（分）</div>
+        <input
+          type="number"
+          className="sync-input"
+          value={minutes}
+          onChange={(e) => setMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+          min={0}
+          step={1}
+          autoFocus
+          style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 700 }}
+        />
+        <div className="lp-popup-actions">
+          <button className="btn btn-ghost" onClick={onClose}>キャンセル</button>
+          <button className="btn btn-primary" onClick={() => { onSave(minutes); onClose(); }}>
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventItem({ event, onToggle, onEdit, onStartTracking, onPauseTracking, onResumeTracking, onCompleteTracking, onEditTime }) {
+  const tracking = event.tracking || null;
+  const isRunning = tracking?.status === 'running';
+  const isPaused = tracking?.status === 'paused';
+  const hasTracking = !!tracking && (tracking.accumulatedMs > 0 || isRunning);
+
+  const now = useNow(isRunning);
+  const elapsedMs = getElapsedMs(tracking, now);
+  const [editingTime, setEditingTime] = useState(false);
+
+  function handleCheckClick(e) {
+    e.stopPropagation();
+    if (event.completed) {
+      onToggle(event.id);
+    } else if (hasTracking) {
+      onCompleteTracking(event.id);
+    } else {
+      onToggle(event.id);
+    }
+  }
+
+  function handleTrackToggle(e) {
+    e.stopPropagation();
+    if (isRunning) onPauseTracking(event.id);
+    else if (isPaused) onResumeTracking(event.id);
+    else onStartTracking(event.id);
+  }
+
   return (
     <div
-      className={`event-item ${event.completed ? 'completed' : ''}`}
+      className={`event-item ${event.completed ? 'completed' : ''} ${isRunning ? 'tracking' : ''}`}
       style={{ borderLeftColor: event.color || '#7C3AED' }}
     >
       <button
         className="event-check"
-        onClick={() => onToggle(event.id)}
-        aria-label={event.completed ? '未完了に戻す' : '完了にする'}
+        onClick={handleCheckClick}
+        aria-label={event.completed ? '未完了に戻す' : '完了'}
       >
         {event.completed ? <Check size={14} strokeWidth={3} /> : <span className="empty-check" />}
       </button>
+
+      {/* 時間計測ボタン */}
+      {!event.completed && (
+        <button
+          className={`track-btn ${isRunning ? 'running' : ''} ${isPaused ? 'paused' : ''}`}
+          onClick={handleTrackToggle}
+          aria-label={isRunning ? '一時停止' : '計測開始'}
+        >
+          {isRunning ? <Pause size={13} strokeWidth={2.5} /> : <Play size={13} strokeWidth={2.5} />}
+        </button>
+      )}
+
       <div className="event-info" onClick={() => onEdit(event)}>
         <p className="event-title">
           {event.completed ? '✅ ' : ''}{event.title}
@@ -22,18 +99,46 @@ function EventItem({ event, onToggle, onEdit }) {
         <p className="event-meta">
           {event.startTime} 〜 {formatDuration(event.duration)}
         </p>
+        {hasTracking && !event.completed && (
+          <p className="event-tracking">
+            <span className={`track-time ${isRunning ? 'pulse' : ''}`}>
+              ⏱ {formatElapsed(elapsedMs)}
+            </span>
+            <button
+              className="icon-btn"
+              style={{ padding: 2, marginLeft: 4 }}
+              onClick={(e) => { e.stopPropagation(); setEditingTime(true); }}
+            >
+              <Edit3 size={11} />
+            </button>
+            {isRunning && <span className="track-status">進行中</span>}
+            {isPaused && <span className="track-status paused">一時停止</span>}
+          </p>
+        )}
         {event.preMemo && (
           <p className="event-memo-preview">{event.preMemo.slice(0, 40)}{event.preMemo.length > 40 ? '…' : ''}</p>
         )}
       </div>
+
       <button className="icon-btn" onClick={() => onEdit(event)}>
         <ChevronRight size={16} />
       </button>
+
+      {editingTime && (
+        <TimeEditPopup
+          initialMinutes={Math.round(elapsedMs / 60000)}
+          onClose={() => setEditingTime(false)}
+          onSave={(min) => onEditTime(event.id, min)}
+        />
+      )}
     </div>
   );
 }
 
-export default function DayDetail({ date, events, onAdd, onToggle, onEdit }) {
+export default function DayDetail({
+  date, events, onAdd, onToggle, onEdit,
+  onStartTracking, onPauseTracking, onResumeTracking, onCompleteTracking, onEditTime,
+}) {
   const sorted = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return (
@@ -59,6 +164,11 @@ export default function DayDetail({ date, events, onAdd, onToggle, onEdit }) {
               event={ev}
               onToggle={onToggle}
               onEdit={onEdit}
+              onStartTracking={onStartTracking}
+              onPauseTracking={onPauseTracking}
+              onResumeTracking={onResumeTracking}
+              onCompleteTracking={onCompleteTracking}
+              onEditTime={onEditTime}
             />
           ))}
         </div>

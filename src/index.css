@@ -557,6 +557,89 @@ body {
   color: var(--success);
 }
 
+/* ─── 時間計測ボタン ──────────────────── */
+.track-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.track-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.track-btn.running {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.2);
+  animation: trackPulse 2s ease-in-out infinite;
+}
+
+.track-btn.paused {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+@keyframes trackPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.2); }
+  50%      { box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.05); }
+}
+
+.event-tracking {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.track-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.track-time.pulse {
+  animation: textPulse 2s ease-in-out infinite;
+}
+
+@keyframes textPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+.track-status {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+}
+
+.track-status.paused {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.event-item.tracking {
+  background: rgba(124, 58, 237, 0.04);
+}
+
 .event-check:hover { border-color: var(--primary); }
 
 .empty-check {

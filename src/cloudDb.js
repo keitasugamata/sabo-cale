@@ -18,7 +18,9 @@ function eventToRow(ev, userId) {
     master_id: ev.masterId || null,
     recurrence_type: ev.recurrenceType || null,
     google_event_id: ev.googleEventId || null,
+    google_calendar_id: ev.googleCalendarId || null,
     from_google: ev.fromGoogle || false,
+    tracking: ev.tracking || null,
     created_at: ev.createdAt || Date.now(),
   };
 }
@@ -38,7 +40,9 @@ function rowToEvent(row) {
     masterId: row.master_id || undefined,
     recurrenceType: row.recurrence_type || null,
     googleEventId: row.google_event_id || undefined,
+    googleCalendarId: row.google_calendar_id || undefined,
     fromGoogle: row.from_google || false,
+    tracking: row.tracking || null,
     createdAt: row.created_at,
   };
 }

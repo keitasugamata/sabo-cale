@@ -244,6 +244,90 @@ export default function App() {
     await removeAllRecurring(masterId);
   }
 
+  // ─── 時間計測ハンドラ ───────────────────
+  function startTracking(id) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (!ev) return;
+    const now = Date.now();
+    updateEvent(id, {
+      tracking: {
+        status: 'running',
+        firstStartedAt: ev.tracking?.firstStartedAt || now,
+        currentRunStartedAt: now,
+        accumulatedMs: ev.tracking?.accumulatedMs || 0,
+      },
+    });
+  }
+
+  function pauseTracking(id) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (!ev?.tracking || ev.tracking.status !== 'running') return;
+    const now = Date.now();
+    const accumulatedMs =
+      ev.tracking.accumulatedMs + (now - ev.tracking.currentRunStartedAt);
+    updateEvent(id, {
+      tracking: { ...ev.tracking, status: 'paused', currentRunStartedAt: null, accumulatedMs },
+    });
+  }
+
+  function resumeTracking(id) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (!ev?.tracking || ev.tracking.status !== 'paused') return;
+    updateEvent(id, {
+      tracking: { ...ev.tracking, status: 'running', currentRunStartedAt: Date.now() },
+    });
+  }
+
+  function completeWithTracking(id) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (!ev) return;
+    if (!ev.tracking || (!ev.tracking.firstStartedAt && !ev.tracking.accumulatedMs)) {
+      // 計測していない場合は通常の完了トグル
+      toggleComplete(id);
+      return;
+    }
+    const now = Date.now();
+    let accumulatedMs = ev.tracking.accumulatedMs || 0;
+    if (ev.tracking.status === 'running' && ev.tracking.currentRunStartedAt) {
+      accumulatedMs += now - ev.tracking.currentRunStartedAt;
+    }
+
+    // 新しい startTime と duration を計算
+    let updates = {
+      tracking: {
+        ...ev.tracking,
+        status: 'completed',
+        currentRunStartedAt: null,
+        accumulatedMs,
+      },
+      completed: true,
+    };
+    if (ev.tracking.firstStartedAt) {
+      const startDate = new Date(ev.tracking.firstStartedAt);
+      const newStartTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+      const newDuration = Math.max(1, Math.round(accumulatedMs / 60000));
+      updates.startTime = newStartTime;
+      updates.duration = newDuration;
+    }
+    updateEvent(id, updates);
+  }
+
+  // 計測時間を直接編集（分単位）
+  function editTrackingTime(id, minutes) {
+    const ev = eventsRef.current.find((e) => e.id === id);
+    if (!ev) return;
+    const accumulatedMs = Math.max(0, minutes) * 60000;
+    const wasRunning = ev.tracking?.status === 'running';
+    updateEvent(id, {
+      tracking: {
+        status: wasRunning ? 'running' : 'paused',
+        firstStartedAt: ev.tracking?.firstStartedAt || Date.now(),
+        currentRunStartedAt: wasRunning ? Date.now() : null,
+        accumulatedMs,
+      },
+    });
+  }
+
   // 長押しポップアップ用
   const [longPressPopup, setLongPressPopup] = useState(null);
 
@@ -419,6 +503,11 @@ export default function App() {
             onAdd={handleAddEvent}
             onToggle={toggleComplete}
             onEdit={handleEditEvent}
+            onStartTracking={startTracking}
+            onPauseTracking={pauseTracking}
+            onResumeTracking={resumeTracking}
+            onCompleteTracking={completeWithTracking}
+            onEditTime={editTrackingTime}
           />
         )}
       </main>

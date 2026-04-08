@@ -47,3 +47,7 @@ create policy "Users manage own events" on events
 drop policy if exists "Users manage own tags" on tags;
 create policy "Users manage own tags" on tags
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 後から追加されたカラム（既存テーブルにも適用可能・冪等）
+alter table events add column if not exists google_calendar_id text;
+alter table events add column if not exists tracking jsonb;
