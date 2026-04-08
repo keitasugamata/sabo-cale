@@ -13,6 +13,7 @@ import { useGoogleCalendars } from './hooks/useGoogleCalendars';
 import { supabase } from './supabase';
 import { getSetting, saveSetting } from './db';
 import { MONTHS_JP, addMonths, toDateString, generateId } from './utils/dateUtils';
+import { toChipColor } from './utils/colorUtils';
 
 const CHIP_SIZES = ['xs', 's', 'm', 'l'];
 const CHIP_SIZE_LABELS = { xs: '極小', s: '小', m: '中', l: '大' };
@@ -108,20 +109,20 @@ export default function App() {
   const dayEvents   = selectedDate ? getEventsForDate(selectedDate) : [];
 
   // チップ色：Google カレンダー > 何をする > 誰と > イベント色
+  // ダークトーンに変換して白文字でも視認性を確保
   const getChipColor = useCallback((event) => {
+    let raw = event.color || '#7C3AED';
     if (event.googleCalendarId) {
       const cal = googleCalendars.find((c) => c.id === event.googleCalendarId);
-      if (cal?.backgroundColor) return cal.backgroundColor;
-    }
-    if (event.tags?.what) {
+      if (cal?.backgroundColor) raw = cal.backgroundColor;
+    } else if (event.tags?.what) {
       const tag = whatTags.find((t) => t.label === event.tags.what);
-      if (tag) return tag.color;
-    }
-    if (event.tags?.with) {
+      if (tag) raw = tag.color;
+    } else if (event.tags?.with) {
       const tag = withTags.find((t) => t.label === event.tags.with);
-      if (tag) return tag.color;
+      if (tag) raw = tag.color;
     }
-    return event.color || '#7C3AED';
+    return toChipColor(raw);
   }, [whatTags, withTags, googleCalendars]);
 
   // タグ色変更ハンドラ
