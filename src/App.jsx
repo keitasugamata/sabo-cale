@@ -79,6 +79,7 @@ export default function App() {
   const {
     calendars: googleCalendars,
     refresh: refreshGoogleCals,
+    signIn: signInGoogle,
     push: pushToGoogle,
     remove: deleteFromGoogle,
     fetchAll: fetchGoogleCal,
@@ -521,6 +522,7 @@ export default function App() {
           whereTags={whereTags}
           googleCalendars={googleCalendars}
           defaultPushCalId={defaultPushCalId}
+          onConnectGoogle={signInGoogle}
           onSave={handleSaveEvent}
           onDelete={handleRemoveEvent}
           onDeleteAll={handleRemoveAllRecurring}

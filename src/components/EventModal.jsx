@@ -109,7 +109,7 @@ function InlineTagSelector({ icon, label, value, tags, onChange, onCreateTag }) 
 export default function EventModal({
   date, event, withTags, whatTags, whereTags,
   googleCalendars = [], defaultPushCalId = '',
-  onSave, onDelete, onDeleteAll, onCreateTag, onClose,
+  onSave, onDelete, onDeleteAll, onCreateTag, onConnectGoogle, onClose,
 }) {
   const isEdit = !!event;
   const isRecurring = !!(event?.masterId || event?.recurrenceType);
@@ -239,9 +239,9 @@ export default function EventModal({
           </section>
 
           {/* Google カレンダー送信先 */}
-          {writableCals.length > 0 && (
-            <section className="modal-section">
-              <label className="section-label"><Calendar size={14} /> Googleカレンダーに送信</label>
+          <section className="modal-section">
+            <label className="section-label"><Calendar size={14} /> Googleカレンダーに送信</label>
+            {writableCals.length > 0 ? (
               <select
                 className="sync-input"
                 value={googleCalId}
@@ -252,8 +252,20 @@ export default function EventModal({
                   <option key={c.id} value={c.id}>{c.summary}</option>
                 ))}
               </select>
-            </section>
-          )}
+            ) : (
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  try { await onConnectGoogle?.(); }
+                  catch (err) { console.warn('Google login failed', err); }
+                }}
+              >
+                <Calendar size={14} /> Googleカレンダーと連携する
+              </button>
+            )}
+          </section>
 
           {/* メモ */}
           <section className="modal-section">
