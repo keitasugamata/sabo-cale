@@ -190,8 +190,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 4px;
+  padding: 10px 10px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -200,16 +200,26 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-.app-logo { font-size: 1.25rem; }
+.app-logo {
+  font-size: 1.35rem;
+  line-height: 1;
+}
 
 .app-name {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--primary);
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* 狭い画面ではアプリ名を非表示 */
+@media (max-width: 420px) {
+  .app-name { display: none; }
 }
 
 .header-center {
@@ -235,7 +245,8 @@ body {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1px;
+  flex-shrink: 0;
 }
 
 /* ─── Icon Button ─────────────────────── */
@@ -244,13 +255,15 @@ body {
   border: none;
   cursor: pointer;
   color: var(--text-secondary);
-  padding: 6px;
+  padding: 5px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
+
+.app-header .icon-btn { padding: 6px 5px; }
 
 .icon-btn:hover {
   background: var(--surface2);
