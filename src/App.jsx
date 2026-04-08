@@ -29,6 +29,7 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [showSizePicker, setShowSizePicker] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // 認証
   const [user, setUser] = useState(null);
@@ -366,10 +367,31 @@ export default function App() {
           </button>
           <button className="icon-btn" onClick={() => setScreen('export')} title="エクスポート"><Share2 size={17} /></button>
           {user ? (
-            <button className="icon-btn user-btn" onClick={handleSignOut} title={`${user.email} (タップでログアウト)`}>
-              <User size={17} />
-              <span className="user-dot" />
-            </button>
+            <div className="user-menu-wrap">
+              <button className="icon-btn user-btn" onClick={() => setShowUserMenu((v) => !v)} title="アカウント">
+                <User size={17} />
+                <span className="user-dot" />
+              </button>
+              {showUserMenu && (
+                <>
+                  <div className="user-menu-backdrop" onClick={() => setShowUserMenu(false)} />
+                  <div className="user-menu">
+                    <div className="user-menu-info">
+                      <div className="user-menu-icon">👤</div>
+                      <div className="user-menu-email">{user.email}</div>
+                      <div className="user-menu-status">✅ ログイン中</div>
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-block"
+                      onClick={async () => { setShowUserMenu(false); await handleSignOut(); }}
+                      style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                    >
+                      ログアウト
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <button className="icon-btn" onClick={() => setShowAuthModal(true)} title="ログイン">
               <LogIn size={17} />

@@ -3,6 +3,7 @@ const API_KEY   = import.meta.env.VITE_GOOGLE_API_KEY   || '';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const SCOPES    = 'https://www.googleapis.com/auth/calendar';
 const DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+const TOKEN_KEY = 'sabocare-google-token';
 
 let tokenClient = null;
 let initialized = false;
@@ -10,6 +11,31 @@ let initialized = false;
 // ── 設定チェック ─────────────────────────────
 export function isConfigured() {
   return !!(API_KEY && CLIENT_ID);
+}
+
+// ── トークン永続化 ──────────────────────────
+function saveToken(token) {
+  try {
+    const data = {
+      access_token: token.access_token,
+      expires_at: Date.now() + ((token.expires_in || 3600) - 60) * 1000, // 1分のバッファ
+    };
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(data));
+  } catch (e) { /* ignore */ }
+}
+
+function loadToken() {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.expires_at < Date.now()) return null;
+    return data;
+  } catch { return null; }
+}
+
+function clearStoredToken() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
 }
 
 // ── スクリプトローダー ───────────────────────
@@ -43,6 +69,12 @@ export async function initGoogleCalendar() {
     callback: '',
   });
 
+  // 保存されていたトークンを復元
+  const saved = loadToken();
+  if (saved) {
+    window.gapi.client.setToken({ access_token: saved.access_token });
+  }
+
   initialized = true;
   return true;
 }
@@ -50,11 +82,14 @@ export async function initGoogleCalendar() {
 export function isInitialized() { return initialized; }
 
 // ── 認証 ─────────────────────────────────────
-export function requestToken() {
+export function requestToken(silent = false) {
   return new Promise((resolve, reject) => {
     if (!tokenClient) { reject(new Error('not initialized')); return; }
-    tokenClient.callback = (res) => res.error ? reject(res.error) : resolve(res);
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+    tokenClient.callback = (res) => {
+      if (res.error) reject(res.error);
+      else { saveToken(res); resolve(res); }
+    };
+    tokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' });
   });
 }
 
@@ -64,6 +99,7 @@ export function revokeToken() {
     window.google.accounts.oauth2.revoke(token.access_token);
     window.gapi.client.setToken('');
   }
+  clearStoredToken();
 }
 
 export function isSignedIn() {
