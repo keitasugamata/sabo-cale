@@ -651,6 +651,29 @@ body {
   font-weight: 500;
 }
 
+.tl-gap-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--surface2);
+  padding: 3px 10px 3px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+
+.tl-gap-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  border-style: solid;
+  color: var(--primary);
+}
+
 .event-check {
   width: 22px;
   height: 22px;

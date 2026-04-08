@@ -28,6 +28,7 @@ export default function App() {
   const [screen, setScreen] = useState('calendar');
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [eventPresets, setEventPresets] = useState(null);
   const [showSizePicker, setShowSizePicker] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -220,8 +221,21 @@ export default function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [syncFromGoogle, googleCalendars.length, sourceCalIds.length]);
 
-  function handleAddEvent() { setEditingEvent(null); setShowEventModal(true); }
-  function handleEditEvent(ev) { setEditingEvent(ev); setShowEventModal(true); }
+  function handleAddEvent() {
+    setEditingEvent(null);
+    setEventPresets(null);
+    setShowEventModal(true);
+  }
+  function handleEditEvent(ev) {
+    setEditingEvent(ev);
+    setEventPresets(null);
+    setShowEventModal(true);
+  }
+  function handleAddAtTime(startTime, duration) {
+    setEditingEvent(null);
+    setEventPresets({ startTime, duration });
+    setShowEventModal(true);
+  }
 
   // 削除時、Google にもある予定なら Google 側からも削除
   async function handleRemoveEvent(id) {
@@ -502,6 +516,7 @@ export default function App() {
             date={selectedDate}
             events={dayEvents}
             onAdd={handleAddEvent}
+            onAddAtTime={handleAddAtTime}
             onToggle={toggleComplete}
             onEdit={handleEditEvent}
             onStartTracking={startTracking}
@@ -517,6 +532,7 @@ export default function App() {
         <EventModal
           date={selectedDate}
           event={editingEvent}
+          presets={eventPresets}
           withTags={withTags}
           whatTags={whatTags}
           whereTags={whereTags}
@@ -527,7 +543,7 @@ export default function App() {
           onDelete={handleRemoveEvent}
           onDeleteAll={handleRemoveAllRecurring}
           onCreateTag={handleCreateTag}
-          onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
+          onClose={() => { setShowEventModal(false); setEditingEvent(null); setEventPresets(null); }}
         />
       )}
 

@@ -107,7 +107,7 @@ function InlineTagSelector({ icon, label, value, tags, onChange, onCreateTag }) 
 
 // ─── メインモーダル ────────────────────────────
 export default function EventModal({
-  date, event, withTags, whatTags, whereTags,
+  date, event, presets, withTags, whatTags, whereTags,
   googleCalendars = [], defaultPushCalId = '',
   onSave, onDelete, onDeleteAll, onCreateTag, onConnectGoogle, onClose,
 }) {
@@ -115,9 +115,16 @@ export default function EventModal({
   const isRecurring = !!(event?.masterId || event?.recurrenceType);
   const now = new Date();
 
-  const [hour, setHour] = useState(event ? +event.startTime.split(':')[0] : now.getHours());
-  const [minute, setMinute] = useState(event ? +event.startTime.split(':')[1] : Math.floor(now.getMinutes() / 15) * 15);
-  const [duration, setDuration] = useState(event?.duration ?? 60);
+  const presetH = presets?.startTime ? +presets.startTime.split(':')[0] : null;
+  const presetM = presets?.startTime ? +presets.startTime.split(':')[1] : null;
+
+  const [hour, setHour] = useState(
+    event ? +event.startTime.split(':')[0] : (presetH ?? now.getHours())
+  );
+  const [minute, setMinute] = useState(
+    event ? +event.startTime.split(':')[1] : (presetM ?? Math.floor(now.getMinutes() / 15) * 15)
+  );
+  const [duration, setDuration] = useState(event?.duration ?? presets?.duration ?? 60);
   const [withTag, setWithTag] = useState(event?.tags?.with ? withTags.find((t) => t.label === event.tags.with) ?? null : null);
   const [whatTag, setWhatTag] = useState(event?.tags?.what ? whatTags.find((t) => t.label === event.tags.what) ?? null : null);
   const [whereTag, setWhereTag] = useState(event?.tags?.where ? whereTags.find((t) => t.label === event.tags.where) ?? null : null);

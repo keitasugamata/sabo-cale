@@ -20,6 +20,14 @@ function calcGapMinutes(prev, next) {
   return nextStartMin - prevEndMin;
 }
 
+function calcGapStartTime(prev) {
+  const [h, m] = prev.startTime.split(':').map(Number);
+  const totalMin = h * 60 + m + (prev.duration || 0);
+  const nh = Math.floor(totalMin / 60) % 24;
+  const nm = totalMin % 60;
+  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+}
+
 function TimeEditPopup({ initialMinutes, onSave, onClose }) {
   const [minutes, setMinutes] = useState(initialMinutes);
   return (
@@ -145,20 +153,23 @@ function TimelineEvent({ event, position, onToggle, onEdit, onStartTracking, onP
   );
 }
 
-function TimelineGap({ minutes }) {
+function TimelineGap({ minutes, startTime, onClick }) {
   return (
     <div className="tl-row tl-gap">
       <div className="tl-time"></div>
       <div className="tl-line"></div>
       <div className="tl-content">
-        <span className="tl-gap-label">空き {formatDuration(minutes)}</span>
+        <button className="tl-gap-btn" onClick={onClick} title="この時間に予定を追加">
+          <Plus size={11} />
+          <span>{startTime}〜 空き {formatDuration(minutes)}</span>
+        </button>
       </div>
     </div>
   );
 }
 
 export default function DayDetail({
-  date, events, onAdd, onToggle, onEdit,
+  date, events, onAdd, onAddAtTime, onToggle, onEdit,
   onStartTracking, onPauseTracking, onResumeTracking, onCompleteTracking, onEditTime,
 }) {
   const sorted = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -204,7 +215,13 @@ export default function DayDetail({
                   onCompleteTracking={onCompleteTracking}
                   onEditTime={onEditTime}
                 />
-                {next && gap > 0 && <TimelineGap minutes={gap} />}
+                {next && gap > 0 && (
+                  <TimelineGap
+                    minutes={gap}
+                    startTime={calcGapStartTime(ev)}
+                    onClick={() => onAddAtTime?.(calcGapStartTime(ev), gap)}
+                  />
+                )}
               </React.Fragment>
             );
           })}
