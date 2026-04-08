@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   isConfigured, isInitialized, isSignedIn,
-  initGoogleCalendar, requestToken, listCalendars, pushEventToGoogle,
+  initGoogleCalendar, requestToken, getTokenRemainingMs,
+  listCalendars, pushEventToGoogle,
   fetchGoogleEvents, deleteGoogleEvent,
 } from '../utils/googleCalendar';
 
@@ -45,6 +46,38 @@ export function useGoogleCalendars() {
     setCalendars(cals);
     return cals;
   }, []);
+
+  // 期限切れの5分前にバックグラウンドでサイレント更新
+  useEffect(() => {
+    if (!signedIn) return;
+    let timeoutId;
+
+    function scheduleNext() {
+      const remaining = getTokenRemainingMs();
+      // 残り5分前 or 即座に
+      const refreshIn = Math.max(remaining - 5 * 60 * 1000, 30 * 1000);
+      timeoutId = setTimeout(async () => {
+        try {
+          await requestToken(true);
+        } catch (e) { /* サイレント失敗、APIコール時に再試行される */ }
+        scheduleNext();
+      }, refreshIn);
+    }
+    scheduleNext();
+
+    // タブにフォーカスが戻ったときも更新を試みる
+    const onFocus = async () => {
+      if (getTokenRemainingMs() < 5 * 60 * 1000) {
+        try { await requestToken(true); } catch {}
+      }
+    };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [signedIn]);
 
   const refresh = useCallback(async () => {
     try {

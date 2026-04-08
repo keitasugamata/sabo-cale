@@ -106,51 +106,96 @@ export function isSignedIn() {
   return !!window.gapi?.client?.getToken();
 }
 
-// ── カレンダー操作 ───────────────────────────
-export async function listCalendars() {
-  const res = await window.gapi.client.calendar.calendarList.list();
-  return res.result.items || [];
+// 残り有効期限（ms）。なければ 0
+export function getTokenRemainingMs() {
+  const saved = loadToken();
+  if (!saved) return 0;
+  return Math.max(0, saved.expires_at - Date.now());
 }
 
-export async function pushEventToGoogle(event, calendarId = 'primary') {
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const start = new Date(event.date + 'T' + event.startTime + ':00');
-  const end = new Date(start.getTime() + event.duration * 60000);
-
-  const body = {
-    summary: event.title,
-    description: buildDesc(event),
-    start: { dateTime: start.toISOString(), timeZone: tz },
-    end:   { dateTime: end.toISOString(),   timeZone: tz },
-  };
-
-  if (event.googleEventId) {
-    const res = await window.gapi.client.calendar.events.update({
-      calendarId, eventId: event.googleEventId, resource: body,
-    });
-    return res.result;
-  } else {
-    const res = await window.gapi.client.calendar.events.insert({
-      calendarId, resource: body,
-    });
-    return res.result;
+// ── トークン自動更新ラッパー ─────────────────
+// API呼び出し前にトークンを検証し、期限切れ間近ならサイレント更新
+async function ensureToken() {
+  const remaining = getTokenRemainingMs();
+  // 残り3分以下なら更新を試みる
+  if (remaining < 3 * 60 * 1000) {
+    try { await requestToken(true); }
+    catch (e) { /* サイレント失敗。401で再試行される */ }
   }
 }
 
-export async function fetchGoogleEvents(calendarId = 'primary', year, month) {
-  const timeMin = new Date(year, month, 1).toISOString();
-  const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+// 401エラー時にサイレント再認証してリトライ
+async function callWithRetry(fn) {
+  await ensureToken();
+  try {
+    return await fn();
+  } catch (e) {
+    const status = e?.status ?? e?.result?.error?.code;
+    if (status === 401) {
+      try {
+        await requestToken(true);
+        return await fn();
+      } catch {
+        throw e;
+      }
+    }
+    throw e;
+  }
+}
 
-  const res = await window.gapi.client.calendar.events.list({
-    calendarId, timeMin, timeMax,
-    singleEvents: true, orderBy: 'startTime', maxResults: 250,
+// ── カレンダー操作 ───────────────────────────
+export async function listCalendars() {
+  return callWithRetry(async () => {
+    const res = await window.gapi.client.calendar.calendarList.list();
+    return res.result.items || [];
   });
+}
 
-  return (res.result.items || []).map(googleEventToLocal);
+export async function pushEventToGoogle(event, calendarId = 'primary') {
+  return callWithRetry(async () => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const start = new Date(event.date + 'T' + event.startTime + ':00');
+    const end = new Date(start.getTime() + event.duration * 60000);
+
+    const body = {
+      summary: event.title,
+      description: buildDesc(event),
+      start: { dateTime: start.toISOString(), timeZone: tz },
+      end:   { dateTime: end.toISOString(),   timeZone: tz },
+    };
+
+    if (event.googleEventId) {
+      const res = await window.gapi.client.calendar.events.update({
+        calendarId, eventId: event.googleEventId, resource: body,
+      });
+      return res.result;
+    } else {
+      const res = await window.gapi.client.calendar.events.insert({
+        calendarId, resource: body,
+      });
+      return res.result;
+    }
+  });
+}
+
+export async function fetchGoogleEvents(calendarId = 'primary', year, month) {
+  return callWithRetry(async () => {
+    const timeMin = new Date(year, month, 1).toISOString();
+    const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+
+    const res = await window.gapi.client.calendar.events.list({
+      calendarId, timeMin, timeMax,
+      singleEvents: true, orderBy: 'startTime', maxResults: 250,
+    });
+
+    return (res.result.items || []).map(googleEventToLocal);
+  });
 }
 
 export async function deleteGoogleEvent(eventId, calendarId = 'primary') {
-  await window.gapi.client.calendar.events.delete({ calendarId, eventId });
+  return callWithRetry(async () => {
+    await window.gapi.client.calendar.events.delete({ calendarId, eventId });
+  });
 }
 
 // ── ヘルパー ─────────────────────────────────
